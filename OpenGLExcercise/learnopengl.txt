@@ -1,0 +1,617 @@
+
+
+OpenGl相关
+VertexData 顶点数组数据->
+	(1)顶点数据是一系列顶点的几何,一个顶点是一个3D坐标的数据的集合
+VertexShader 顶点着色器->
+	(1)输入单独的一个顶点,目的是把3D坐标转为另一种3D坐标,同时对顶点数据进行基本处理,利用顶点缓冲对象(VBO)管理这块内存
+Primitive Assembly 图元装配->
+	(1)几种图元:GL_POINTS、GL_TRIANGLES、GL_LINE_STRIP。
+	(2)将顶点着色器输出的所有顶点作为输出,并所有的点状配成指定的图元的形状
+GeometryShader 几何着色器->
+	(1)把图元形式的一系列顶点的集合作为输入,可以通过产生新顶点构造出新的(或是其他的)图元来生成其他形状
+Rasterization 光栅化->
+	(1)把图元映射为最终屏幕上响应的像素,生成供片段着色器使用的片段,在片段着色器之前会执行裁剪Clipping,裁剪会丢弃
+	超出你的视图以外的所有像素.用于提升执行效率
+	(2)OpenGL中的一个片段是OpenGL渲染一个像素所需的所有数据
+Fragment Shader 片段着色器->
+	(1)目的是计算一个像素的最终颜色,这也是OpenGL高级效果产生的地方,通常片段着色器包含3D场景的数据(比如光照,阴影,光的颜色等),这些数据可以被用来计算最终的像素的颜色
+AlphaTest and Blending 测试与混合
+	(1)检测片段的对应的深入(和模板Stencil)值,用他们判断这个像素是其他物品的前面还是后面,决定是否应该丢弃.
+	这个阶段也会检查Alpha值(Alpha值定义了一个物体的透明度),并对物体进行混合(Blend)
+
+图形渲染管线划分为两个部分:1.将3D坐标转换为2D坐标 2.把2D坐标转换为实际的有颜色的像素
+
+顶点输入
+	OpenGL仅当3D坐标在x,y,z上都为-1.0到1.0范围内时才处理它,所有在所谓的标准化设备坐标范围内的坐标才会最终呈现在屏幕上.
+	顶点坐标数据->标准化设备坐标->屏幕空间坐标(通过glViewPort提供的数据进行视口变换(Viewport TransForm))完成
+	顶点数据
+	通过顶点缓冲对象(VBO)来存储,可使用glGenBuffers和一个缓冲ID生成一个VBO对象
+	unsigned int VBO;
+	glGenBuffers(1, &VBO);
+	任何(在GL_ARRAY_BUFFER目标上)缓冲都会用来配置当前绑定的缓冲(VBO),然后可通过glBufferData函数,把定义的顶点数据
+	复制到缓冲的内存中:
+	glBufferData(GL_ARRAY_BUFFER,sizeof(vertices),vertices,GL_STATIC_DRAW)
+	glBufferData是一个专门用来把用户定义的数据复制到当前绑定缓冲的函数。
+	它的第一个参数是目标缓冲的类型：顶点缓冲对象当前绑定到GL_ARRAY_BUFFER目标上。
+	第二个参数指定传输数据的大小(以字节为单位)用一个简单的sizeof计算出顶点数据大小就行。
+	第三个参数是我们希望发送的实际数据。
+	第四个参数指定了我们希望显卡如何管理给定的数据。它有三种形式：
+	GL_STATIC_DRAW ：数据不会或几乎不会改变。
+	GL_DYNAMIC_DRAW：数据会被改变很多。
+	GL_STREAM_DRAW ：数据每次绘制时都会改变。	
+顶点着色器
+	顶点着色器(VertexSharder)是几个可编程着色器中一个.渲染最少需要一个顶点和一个片段着色器
+	编写顶点着色器代码
+	//in参数,声明所有输入的顶点属性(Input Vertex Attribute)
+	layout (location = 0) in vec3 aPos;
+	void main()
+	{
+		gl_Position = vec4(aPos.x,aPos.y,aPos.z,1.0);
+	}
+	//着色器代码存在字符串上
+	const char *vertexShaderSource = "#version 330 core\n"
+    "layout (location = 0) in vec3 aPos;\n"
+    "void main()\n"
+    "{\n"
+    "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+    "}\0";
+
+编译着色器
+	创建一个着色器对象,用ID作为引用
+	unsigned int vertexShader;
+	vertexShader = glCreateShader(GL_VERTEX_SHARDER)
+	附加着色器源码到着色器对象上,然后编译
+	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+	glCompileShader(vertexShader);
+	glShaderSource函数{
+		第一个参数:编译的着色器对象,
+		第二参数指定了传递的源码字符串数量，这里只有一个。
+		第三个参数是顶点着色器真正的源码，
+		第四个参数我们先设置为NULL。
+	}
+	可用	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+	int  success;
+	char infoLog[512];
+	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+	返回的success来判断是否成功,glGetShaderInfoLog这个输出
+	if(!success)
+	{
+	    glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+	    std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+	}
+
+片段着色器
+	计算像素最后的颜色输出
+	编写一个片段着色器
+	#version 330 core
+	out vec4 FragColor;
+
+	void main()
+	{
+	    FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
+	} 
+	const char *fragmentShaderSource = "#version 330 core\n"
+	"out vec4 FragColor;\n"
+	"void main()\n"
+	"{\n"
+	"   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+	"}\n\0";
+	编译
+	unsigned int fragmentShader;
+	fragmentShader = glCreateShader(GL_FRAGMENT_SHARDER)
+	附加着色器源码到着色器对象上,然后编译
+	glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+	glCompileShader(fragmentShader);
+
+着色器程序
+	创建一个程序对象
+	unsigned int shaderProgram;
+	shaderProgram = glCreateProgram();
+	把着色器附加到程序对象上
+	glAttachShader(shaderProgram,vertexShader);
+	glAttachShader(shaderProgram,fragmentShader);
+	链接着色器
+	glLinkProgram(shaderProgram)
+	判断着色器程序是否失败
+	int  success;
+	char infoLog[512];
+	glGetProgramiv(shaderProgram,GL_LINK_STATUS, &success);
+	返回的success来判断是否成功,glGetShaderInfoLog这个输出
+	if(!success)
+	{
+	    glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+	    std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+	}
+	激活着色器程序对象
+	glUseProgram(shaderProgram)
+	链接之后删除着色器对象
+	glDeleteShader(vertexShader);
+	glDeleteShader(fragmentShader);
+
+
+链接顶点属性
+	顶点着色器允许我们制定任何以顶点属性为形式的输入,这使其具有很强的灵活性的同时,他还的确意味着我们必须手动指定输入数据的哪一个部分对应顶点着色器的那一个顶点属性
+	glVertexAttribPointer函数告诉OpenGL解释顶点数据
+	glVertexAttribPointer(0,3,GL_FLOAT,GL_FALSE,3 * sizeof(float),(void*)0);
+	glEnableVertexAttriArray(0);
+	glVertexAttribPointer函数的参数非常多，所以我会逐一介绍它们：
+
+	1.第一个参数指定我们要配置的顶点属性。还记得我们在顶点着色器中使用layout(location = 0)定义了position顶点属性的位置值(Location)吗？它可以把顶点属性的位置值设置为0。因为我们希望把数据传递到这一个顶点属性中，所以这里我们传入0。
+	2.第二个参数指定顶点属性的大小。顶点属性是一个vec3，它由3个值组成，所以大小是3。
+	3.第三个参数指定数据的类型，这里是GL_FLOAT(GLSL中vec*都是由浮点数值组成的)。
+	4.第四个参数定义我们是否希望数据被标准化(Normalize)如果我们设置为GL_TRUE，所有数据都会被映射到0（对于有符号型signed数据是-1）到1之间。我们把它设置为GL_FALSE。
+	5.第五个参数叫做步长(Stride)，它告诉我们在连续的顶点属性组之间的间隔。由于下个组位置数据在3个float之后，我们把步长设置为3 * sizeof(float)。要注意的是由于我们知道这个数组是紧密排列的（在两个顶点属性之间没有空隙）我们也可以设置为0来让OpenGL决定具体步长是多少（只有当数值是紧密排列时才可用）。一旦我们有更多的顶点属性，我们就必须更小心地定义每个顶点属性之间的间隔，我们在后面会看到更多的例子（译注: 这个参数的意思简单说就是从这个属性第二次出现的地方到整个数组0位置之间有多少字节）。
+	6.第六个参数的类型是void*，所以需要我们进行这个奇怪的强制类型转换。它表示位置数据在缓冲中起始位置的偏移量(Offset)。由于位置数据在数组的开头，所以这里是0。我们会在后面详细解释这个参数。
+
+顶点数组对象VAO
+	创建一个VAO
+	unsigned int VAO;
+	glGenVertexArrays(1, &VAO);
+	要做的只是使用glBindVertexArray绑定VAO。从绑定之后起，我们应该绑定和配置对应的VBO和属性指针，之后解绑VAO供之后使用。当我们打算绘制一个物体的时候，我们只要在绘制物体前简单地把VAO绑定到希望使用的设定上就行了。这段代码应该看起来像这样：
+	unsigned int VA0,VBO
+	//创建VAO,VBO
+	glGenVertexArrays(1, &VAO);
+	glGenBuffer(1,&VBO)
+	// 1. 绑定VAO
+	glBindVertexArray(VAO);
+	// 2. 把顶点数组复制到缓冲中供OpenGL使用
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	// 3. 设置顶点属性指针
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	//渲染循环中
+	// 4. 绘制物体
+	glUseProgram(shaderProgram);
+	glBindVertexArray(VAO); 
+	glDrawArrays(GL_TRIANGLES, 0, 3);
+
+索引缓冲对象(Element Buffer Object，EBO，也叫Index Buffer Object，IBO)
+	
+	//利用索引缓冲对象绘制四边形
+	float vertices[]{
+		0.5f,0.5f,0.0f,
+		0.5f,-0.5f,0.0f,
+		-0.5f,-0.5f,0.0f,
+		-0.5f,0.5f,0.0f
+	};
+	unsigned int indices[] = { // 注意索引从0开始! 
+		0, 1, 3, // 第一个三角形
+		1, 2, 3  // 第二个三角形
+	};
+	//创建一个IBO 索引缓冲对象
+	unsigned int EBO;
+	glGenBuffers(1, &EBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+	glvertexattribpointer(0, 3, gl_float, gl_false, 3 * sizeof(float), (void*)0);
+	glenablevertexattribarray(0);
+	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+//着色器相关
+向量
+GLSL中的向量是一个可以包含有1、2、3或者4个分量的容器，分量的类型可以是前面默认基础类型的任意一个。它们可以是下面的形式（n代表分量的数量）：
+
+类型	含义
+vecn	包含n个float分量的默认向量
+bvecn	包含n个bool分量的向量
+ivecn	包含n个int分量的向量
+uvecn	包含n个unsigned int分量的向量
+dvecn	包含n个double分量的向量
+
+输入与输出
+
+顶点着色器
+{
+	#version 330 core
+	layout (location = 0) in vec3 aPos; // 位置变量的属性位置值为0
+
+	out vec4 vertexColor; // 为片段着色器指定一个颜色输出
+
+	void main()
+	{
+		gl_Position = vec4(aPos, 1.0); // 注意我们如何把一个vec3作为vec4的构造器的参数
+		vertexColor = vec4(0.5, 0.0, 0.0, 1.0); // 把输出变量设置为暗红色
+	}
+}
+
+片段着色器
+{
+	#version 330 core
+	out vec4 FragColor;
+
+	in vec4 vertexColor; // 从顶点着色器传来的输入变量（名称相同、类型相同）
+
+	void main()
+	{
+		FragColor = vertexColor;
+	}
+}
+
+
+Uniform
+Uniform是一种从CPU中的应用向GPU中的着色器发送数据的方式，但uniform和顶点属性有些不同。
+首先，uniform是全局的(Global)。全局意味着uniform变量必须在每个着色器程序对象中都是独一无二的，而且它可以被着色器程序的任意着色器在任意阶段访问。
+第二，无论你把uniform值设置成什么，uniform会一直保存它们的数据，直到它们被重置或更新。
+
+片段着色器
+{
+	#version 330 core
+	out vec4 FragColor;
+
+	uniform vec4 ourColor; // 在OpenGL程序代码中设定这个变量
+
+	void main()
+	{
+		FragColor = ourColor;
+	}
+}
+glGetUniformLocation查询uniform ourColor的位置值。
+glUniform4f函数设置uniform值,设置这个之前必须先glUsePrograme(shaderProgram)
+
+
+纹理
+纹理环绕方式
+	环绕方式	描述
+	GL_REPEAT	对纹理的默认行为。重复纹理图像。
+	GL_MIRRORED_REPEAT	和GL_REPEAT一样，但每次重复图片是镜像放置的。
+	GL_CLAMP_TO_EDGE	纹理坐标会被约束在0到1之间，超出的部分会重复纹理坐标的边缘，产生一种边缘被拉伸的效果。
+	GL_CLAMP_TO_BORDER	超出的坐标为用户指定的边缘颜色。
+
+	纹理坐标的范围通常是从(0,0)到(1,1),glTexParameteri函数对单独的一个坐标设置(s,t(如果使用3D纹理那么还有一个r),它们和x,y,z是等价)
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_MIRRORED_REPEAT)
+	glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_MIRRORED_REPEAT)
+	第一个参数化是纹理目标,第二个参数指定设置的选项与应用的纹理轴,第三个参数环绕方式,如果选择GL_CLAMP_TO_BORDER选项,还需要指定一个边缘的颜色
+	用glTexParameter函数的fv后缀形式，用GL_TEXTURE_BORDER_COLOR作为它的选项，并且传递一个float数组作为边缘的颜色值：
+	float borderColor[] = { 1.0f, 1.0f, 0.0f, 1.0f };
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+纹理过滤
+	纹理坐标不依赖分辨率,他可以是任意浮点值.纹理过滤有多个选项,例如GL_NEAREST和GL_LINEAR
+		GL_NEAREST也叫邻近过滤是OpenGL默认的纹理过滤方式,当设置为GL_NEAREST的时候,OpenGL会选择中心点最接近纹坐标的那个像素.
+		GL_LINEAR也叫线性过滤,他会基于纹理坐标附近的纹理像素,计算出一个插值,近似出这些纹理像素之间的颜色,一个纹理像素的中心距离纹理坐标越近,那么这个纹理像素的颜色对最终的样本颜色的贡献越大
+	使用GL_NEAREST会产生颗粒状的图案,能够清晰看到组成纹理的像素,而GL_LINEAR能够产生更平滑的图案,很难看出单个的纹理像素.GL_LINEAR可以产生更真实的输出.
+	进行放大(Magnify)和缩小(Minify)操作的时候可以设置纹理过滤的选项，比如你可以在纹理被缩小的时候使用邻近过滤，被放大时使用线性过滤。
+	使用glTexParameteri函数为放大和缩小指定过滤方式。
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+多级渐远纹理
+	理念:
+	距观察者的距离超过一定的阈值，OpenGL会使用不同的多级渐远纹理，即最适合物体的距离的那个。由于距离远，解析度不高也不会被用户注意到。
+	同时，多级渐远纹理另一加分之处是它的性能非常好。主要使用在纹理被缩小的情况,对于放大过滤设置多级渐远纹理过滤会没有任何效果
+
+	指定不同多级渐远纹理级别之间的过滤方式
+	过滤方式	描述
+	GL_NEAREST_MIPMAP_NEAREST	使用最邻近的多级渐远纹理来匹配像素大小，并使用邻近插值进行纹理采样
+	GL_LINEAR_MIPMAP_NEAREST	使用最邻近的多级渐远纹理级别，并使用线性插值进行采样
+	GL_NEAREST_MIPMAP_LINEAR	在两个最匹配像素大小的多级渐远纹理之间进行线性插值，使用邻近插值进行采样
+	GL_LINEAR_MIPMAP_LINEAR	在两个邻近的多级渐远纹理之间使用线性插值，并使用线性插值进行采样
+	使用glTexParameteri设置过滤方式
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+加载与创建纹理
+	加载纹理
+	stb_image.h是Sean Barrett的一个非常流行的单头文件图像加载库
+	int width, height, nrChannels;
+	unsigned char *data = stbi_load("container.jpg", &width, &height, &nrChannels, 0);
+	第一个参数是图片资源,第二个参数是宽度,第三个参数是高度,第四个参数是颜色通道的个数
+
+	生成纹理
+	unsigned int texture;
+	glGenTextures(1, &texture);
+	glBindTexture(GL_TEXTURE_2D, texture);
+	// 为当前绑定的纹理对象设置环绕、过滤方式
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);   
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);//会吧当前绑定的纹理对象附上纹理图像
+	第一个参数指定了纹理目标(Target)。设置为GL_TEXTURE_2D意味着会生成与当前绑定的纹理对象在同一个目标上的纹理（任何绑定到GL_TEXTURE_1D和GL_TEXTURE_3D的纹理不会受到影响）。
+	第二个参数为纹理指定多级渐远纹理的级别，如果你希望单独手动设置每个多级渐远纹理的级别的话。这里我们填0，也就是基本级别。
+	第三个参数告诉OpenGL我们希望把纹理储存为何种格式。我们的图像只有RGB值，因此我们也把纹理储存为RGB值。
+	第四个和第五个参数设置最终的纹理的宽度和高度。我们之前加载图像的时候储存了它们，所以我们使用对应的变量。下个参数应该总是被设为0（历史遗留的问题）。
+	第七第八个参数定义了源图的格式和数据类型。我们使用RGB值加载这个图像，并把它们储存为char(byte)数组，我们将会传入对应值。
+	最后一个参数是真正的图像数据。
+	glGenerateMipmap(GL_TEXTURE_2D);//这会为当前绑定的纹理自动生成所有需要的多级渐远纹理
+
+	应用纹理
+	顶点数组增加纹理坐标信息
+	float vertices[] = {
+	//     ---- 位置 ----       ---- 颜色 ----     - 纹理坐标 -
+		0.5f,  0.5f, 0.0f,   1.0f, 0.0f, 0.0f,   1.0f, 1.0f,   // 右上
+		0.5f, -0.5f, 0.0f,   0.0f, 1.0f, 0.0f,   1.0f, 0.0f,   // 右下
+		-0.5f, -0.5f, 0.0f,   0.0f, 0.0f, 1.0f,   0.0f, 0.0f,   // 左下
+		-0.5f,  0.5f, 0.0f,   1.0f, 1.0f, 0.0f,   0.0f, 1.0f    // 左上
+	};
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+	glEnableVertexAttribArray(2);
+	VertexShader 定义纹理坐标输入信息
+	version 330 core
+	layout (location = 0) in vec3 aPos;
+	layout (location = 1) in vec3 aColor;
+	layout (location = 2) in vec2 aTexCoord;
+
+	out vec3 ourColor;
+	out vec2 TexCoord;
+
+	void main()
+	{
+		gl_Position = vec4(aPos, 1.0);
+		ourColor = aColor;
+		TexCoord = aTexCoord;
+	}
+	FragMentSharder接收
+	#version 330 core
+	out vec4 FragColor;
+
+	in vec3 ourColor;
+	in vec2 TexCoord;
+
+	uniform sampler2D ourTexture;
+
+	void main()
+	{
+		FragColor = texture(ourTexture, TexCoord);
+		//FragColor = texture(ourTexture, TexCoord) * vec4(ourColor, 1.0); //纹理与颜色混合
+	}
+	纹理单元
+	一个纹理的位置值通常称为一个纹理单元(Texture Unit)。一个纹理的默认纹理单元是0，它是默认的激活纹理单元
+	glActiveTexture(GL_TEXTURE0); // 在绑定纹理之前先激活纹理单元
+	glBindTexture(GL_TEXTURE_2D, texture);
+变换
+	向量与标量运算	
+	向量相加减:
+	向量长度:||V|| = 开根号(X平方 + y平方)
+	单位向量长度是1,叫做向量的标准化
+	向量点乘:x向量的长度 * y向量的长度*cos(夹角)
+	Ax   Bx		
+	Ay · By  = (Ax * Bx) + (Ay *By) + (Az * Bz)
+	Az   Bz		
+	向量叉乘:
+	Ax   Bx		Ay*Bz - Az*By
+	Ay × By  = 	Az*Bx - Ax*Bz
+	Az   Bz		Ax*By - Ay*Bx
+	矩阵
+	[ 1 2 3 ] 2×3矩阵(3列2行,也叫做矩阵的维度)
+	[ 4 5 6 ]
+	矩阵的减法
+	矩阵相乘
+		矩阵乘法基本上意味着遵照规定好的法则进行相乘。当然，相乘还有一些限制：
+		只有当左侧矩阵的列数与右侧矩阵的行数相等，两个矩阵才能相乘。
+		矩阵相乘不遵守交换律(Commutative)，也就是说A⋅B≠B⋅A。
+	平移矩阵
+	[1 0 0 X ]
+	[0 1 0 Y ]
+	[0 0 1 Z ]
+	[0 0 0 1 ]
+	单位矩阵
+	单位矩阵是一个除了对角线以外都是0的N×N矩阵
+	[1 0 0 0 ]
+	[0 1 0 0 ]
+	[0 0 1 0 ]
+	[0 0 0 1 ]
+	缩放
+		缩放因子不一样的操作不均匀缩放,一样的叫均匀
+	[S1 0 0 0 ]	    [x]	  [S1*x]
+	[0 S2 0 0 ] 	[y]   [S2*y]
+	[0 0 S3 0 ]  *  [z] = [S3*Z]
+	[0 0 0  1 ]     [1]	  [1]
+	齐次坐标(Homogeneous Coordinates)
+	向量的w分量也叫齐次坐标。想要从齐次向量得到3D向量，我们可以把x、y和z坐标分别除以w坐标。
+	我们通常不会注意这个问题，因为w分量通常是1.0,若w==1，则向量(x, y, z, 1)为空间中的点。若w==0，则向量(x, y, z, 0)为方向。
+	使用齐次坐标有几点好处：
+	它允许我们在3D向量上进行位移（如果没有w分量我们是不能位移向量的
+	如果一个向量的齐次坐标是0，这个坐标就是方向向量(Direction Vector)，
+	因为w坐标是0，这个向量就不能位移（译注：这也就是我们说的不能位移一个方向）。
+
+		
+	glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(trans));
+	第一个参数是uniform的位置值。
+	第二个参数告诉OpenGL发送多少个矩阵，这里是1。
+	第三个参数询问我们我们是否希望对我们的矩阵进行置换(Transpose)，也就是说交换我们矩阵的行和列。
+	OpenGL开发者通常使用一种内部矩阵布局，叫做列主序(Column - major Ordering)布局。GLM的默认布局就是列主序，所以并不需要置换矩阵，我们填GL_FALSE
+	最后一个参数是真正的矩阵数据，但是GLM并不是把它们的矩阵储存为OpenGL所希望接受的那种，因此我们要先用GLM的自带的函数value_ptr来变换这些数据.
+	
+	glm::vec4 vec(1.0f, 0.0f, 0.0f, 1.0f);
+	glm::mat4 trans = glm::mat4(1.0f)
+	trans = glm::translate(trans, glm::vec3(1.0f, 1.0f, 0.0f)); //位移数值glm::vec3(1.0,1.0f,0.0)
+	vec = trans * vec;
+
+	关于旋转,位移,缩放的操作次序
+	Mt 位移
+	Mr 旋转
+	Ms 缩放
+	vec3 顶点位置(主列序)
+	Vec = Mt * Mr * Ms * vec3 从右到左执行
+坐标系统
+	转换流程
+	局部坐标是对象相对于局部原点的坐标,也是物体起始的坐标-->ModelMatrix(模型矩阵)
+	->将局部坐标变换为世界空间坐标,这些坐标相对于世界的全局原点,会和其他无皮一起相对于世界的原点进行摆放->ViewMatrix(观察矩阵)
+	->世界坐标转换为观察空间坐标,使得每个坐标都是从摄像机或者观察者的角度进行观察->ProjectionMatrix(投影矩阵)
+	->将观察空间坐标转变为裁剪坐标,裁剪坐标会被处理至-1.0到1.0的范围内,并判断哪些顶点将会出现在屏幕上->Viewport Transform(视口变换)
+	->将裁剪坐标变换为屏幕坐标,视口变换将位于-1.0到1.0范围的坐标变换到由glViewport函数所定义的坐标范围内。
+	->最后变换出来的坐标将会送到光栅器，将其转化为片段。
+	局部空间(Local Space，或者称为物体空间(Object Space))
+		局部空间是指物体所在的坐标空间，即对象最开始所在的地方。
+	世界空间(World Space)
+		指顶点相对于（游戏）世界的坐标。如果你希望将物体分散在世界上摆放（特别是非常真实的那样），这就是你希望物体变换到的空间。
+		物体的坐标将会从局部变换到世界空间；该变换是由模型矩阵(Model Matrix)实现的。
+		模型矩阵是一种变换矩阵，它能通过对物体进行位移、缩放、旋转来将它置于它本应该在的位置或朝向。
+		你可以将它想像为变换一个房子，你需要先将它缩小（它在局部空间中太大了），并将其位移至郊区的一个小镇，然后在y轴上往左旋转一点以搭配附近的房子。
+		你也可以把上一节将箱子到处摆放在场景中用的那个矩阵大致看作一个模型矩阵；我们将箱子的局部坐标变换到场景/世界中的不同位置。
+	观察空间(View Space，或者称为视觉空间(Eye Space))
+		观察空间是将世界空间坐标转化为用户视野前方的坐标而产生的结果。
+		因此观察空间就是从摄像机的视角所观察到的空间。而这通常是由一系列的位移和旋转的组合来完成，平移/旋转场景从而使得特定的对象被变换到摄像机的前方。
+		这些组合在一起的变换通常存储在一个观察矩阵(View Matrix)里，它被用来将世界坐标变换到观察空间
+	裁剪空间(Clip Space)
+		顶点坐标从观察变换到裁剪空间，我们需要定义一个投影矩阵(Projection Matrix)，
+		它指定了一个范围的坐标，比如在每个维度上的-1000到1000。
+		投影矩阵接着会将在这个指定的范围内的坐标变换为标准化设备坐标的范围(-1.0, 1.0)。
+		所有在范围外的坐标不会被映射到在-1.0到1.0的范围之间，所以会被裁剪掉。
+		在上面这个投影矩阵所指定的范围内，坐标(1250, 500, 750)将是不可见的，这是由于它的x坐标超出了范围，它被转化为一个大于1.0的标准化设备坐标，所以被裁剪掉
+		由投影矩阵创建的观察箱(Viewing Box)被称为平截头体,每个出现在平截头体范围内的坐标都会最终出现在用户的屏幕上.将特定范围内的坐标转化到标准化设备坐标系的过程被称之为投影.
+		一旦所有顶点被变换到裁剪空间，最终的操作——透视除法(Perspective Division)将会执行，在这个过程中我们将位置向量的x，y，z分量分别除以向量的齐次w分量；
+		透视除法是将4D裁剪空间坐标变换为3D标准化设备坐标的过程。
+		这一步会在每一个顶点着色器运行的最后被自动执行。
+		在这一阶段之后，最终的坐标将会被映射到屏幕空间中（使用glViewport中的设定），并被变换成片段。
+	屏幕空间(Screen Space)
+
+
+摄像机
+	1.摄像机的位置-->z轴从屏幕指向你
+		glm::vec3 cameraPos = glm::vec3(0.0f,0.0f,3.0f)
+	2.摄像机方向->用场景原点向量(0,0,0)减去摄像机位置向量的结果就是摄像机的指向向量
+		glm::vec3 cameraTarget = glm::vec3(0.0f,0.0f,0.0f)
+		glm::vec3 cameraDirection = glm::normalize(cameraPos - cameraTarget);
+	3.右轴->右向量,代表摄像机空间的x轴的正方向,获取右向量方式,定义一个上向量,和摄像机方向向量进行叉乘.两个向量叉乘的结果会同时垂直于两向量.
+			因此我们会得到指向x轴正方向的那个向量(交换叉乘顺序就会得到相反的x轴负方向)
+		glm::vec3 up = glm::vec3(0.0f,1.0f,0.0f); //向上向量
+		glm::vec3 camraRight = glm::normalize(glm::cros(up,cameraDirection));
+	4.上轴->已经有了x轴向量和z轴向量，获取一个指向摄像机的正y轴向量就相对简单了：我们把右向量和方向向量进行叉乘：
+		glm::vec3 cameraUp = glm::cross(cameraDirection,camraRight);
+	LookAt矩阵
+				[Rx,Ry,Rz,0] 	[1,0,0,-Px]
+	LookAt =	[Ux,Uy,Uz,0] *	[0,1,0,-Py]
+				[Dx,Dy,Dz,0]	[0,0,1,-Pz]
+				[0 , 0, 0,1]	[0,0,0, 1 ]
+	其中R是右向量，U是上向量，D是方向向量P是摄像机位置向量。注意，位置向量是相反的，因为我们最终希望把世界平移到与我们自身移动的相反方向。
+	创建一个LookAt矩阵,当做我们的观察矩阵
+	glm::mat4 view;
+	view = glm::lookAt(glm::vec3(0.0f,0.0f,3.0f),glm::vec3(0.0f,0.0f,0.0f),glm::vec3(0.0f,1.0f,0.0f));
+	glm::LookAt函数需要一个位置、目标和上向量。
+
+	欧拉角
+	俯仰角(pitch)是描述我们如何往上或往下看的角,偏航角(yaw)表示我们往左和往右看的程度。滚转角(roll)代表我们如何翻滚摄像机
+
+	鼠标输入
+	偏航角和俯仰角是通过鼠标（或手柄）移动获得的，水平的移动影响偏航角，竖直的移动影响俯仰角。
+	它的原理就是，储存上一帧鼠标的位置，在当前帧中我们当前计算鼠标位置与上一帧的位置相差多少。
+	如果水平/竖直差别越大那么俯仰角或偏航角就改变越大，也就是摄像机需要移动更多的距离。
+
+词汇表
+	OpenGL： 一个定义了函数布局和输出的图形API的正式规范。
+	GLAD： 一个拓展加载库，用来为我们加载并设定所有OpenGL函数指针，从而让我们能够使用所有（现代）OpenGL函数。
+	视口(Viewport)： 我们需要渲染的窗口。
+	图形管线(Graphics Pipeline)： 一个顶点在呈现为像素之前经过的全部过程。
+	着色器(Shader)： 一个运行在显卡上的小型程序。很多阶段的图形管道都可以使用自定义的着色器来代替原有的功能。
+	标准化设备坐标(Normalized Device Coordinates, NDC)： 顶点在通过在剪裁坐标系中剪裁与透视除法后最终呈现在的坐标系。所有位置在NDC下-1.0到1.0的顶点将不会被丢弃并且可见。
+	顶点缓冲对象(Vertex Buffer Object)： 一个调用显存并存储所有顶点数据供显卡使用的缓冲对象。
+	顶点数组对象(Vertex Array Object)： 存储缓冲区和顶点属性状态。
+	索引缓冲对象(Element Buffer Object)： 一个存储索引供索引化绘制使用的缓冲对象。
+	Uniform： 一个特殊类型的GLSL变量。它是全局的（在一个着色器程序中每一个着色器都能够访问uniform变量），并且只需要被设定一次。
+	纹理(Texture)： 一种包裹着物体的特殊类型图像，给物体精细的视觉效果。
+	纹理缠绕(Texture Wrapping)： 定义了一种当纹理顶点超出范围(0, 1)时指定OpenGL如何采样纹理的模式。
+	纹理过滤(Texture Filtering)： 定义了一种当有多种纹素选择时指定OpenGL如何采样纹理的模式。这通常在纹理被放大情况下发生。
+	多级渐远纹理(Mipmaps)： 被存储的材质的一些缩小版本，根据距观察者的距离会使用材质的合适大小。
+	stb_image.h： 图像加载库。
+	纹理单元(Texture Units)： 通过绑定纹理到不同纹理单元从而允许多个纹理在同一对象上渲染。
+	向量(Vector)： 一个定义了在空间中方向和/或位置的数学实体。
+	矩阵(Matrix)： 一个矩形阵列的数学表达式。
+	GLM： 一个为OpenGL打造的数学库。
+	局部空间(Local Space)： 一个物体的初始空间。所有的坐标都是相对于物体的原点的。
+	世界空间(World Space)： 所有的坐标都相对于全局原点。
+	观察空间(View Space)： 所有的坐标都是从摄像机的视角观察的。
+	裁剪空间(Clip Space)： 所有的坐标都是从摄像机视角观察的，但是该空间应用了投影。这个空间应该是一个顶点坐标最终的空间，作为顶点着色器的输出。OpenGL负责处理剩下的事情（裁剪/透视除法）。
+	屏幕空间(Screen Space)： 所有的坐标都由屏幕视角来观察。坐标的范围是从0到屏幕的宽/高。
+	LookAt矩阵： 一种特殊类型的观察矩阵，它创建了一个坐标系，其中所有坐标都根据从一个位置正在观察目标的用户旋转或者平移。
+	欧拉角(Euler Angles)： 被定义为偏航角(Yaw)，俯仰角(Pitch)，和滚转角(Roll)从而允许我们通过这三个值构造任何3D方向。
+
+颜色与光照
+	图形学中计算反射颜色
+		glm::vec3 lightColor(1.0f, 1.0f, 1.0f);
+		glm::vec3 toyColor(1.0f, 0.5f, 0.31f);
+		glm::vec3 resultColor = lightColor * toyColor
+	基础光照
+		冯氏光照模型的主要结构由3个分量组成:环境(Ambient)、漫反射(Diffuse)和镜面(Specular)光照。
+			环境光照(Ambient Lighting)
+				即使在黑暗的情况下,世界上通常也仍然有一些光亮(月亮,远处的光),所以物体几乎永远不会是完全黑暗的.
+				为了模拟这个,我们会使用一个环境光照常量.他永远会给物体一些颜色
+			漫反射光照(Diffuse Lighting)
+				模拟光源对物体的方向性影响,(Directional Impact)。它是冯氏光照模型中视觉上最显著的分量。
+				物体的某一部分越是正对着光源，它就会越亮。
+			镜面光照(Specular Lighting)
+				模拟有光泽物体上面出现的亮点,镜面光照的颜色相比于物体的颜色会更倾向于光的颜色
+	漫反射光照
+		漫反射光照使物体上与光线方向越接近的片段能从光源处获得更多的亮度
+		计算漫反射光照:
+			法向量:一个垂直于顶点表面的向量
+			定向的光线:作为光源的位置与片段的位置之间向量差的方向向量.为了计算这个光线,我们需要光的位置向量和片段的位置向量
+	法向量
+		法向量是一个垂直于顶点表面的(单位向量),没有齐次坐标(顶点位置中的w分量),如果模型矩阵执行了不等比缩放,顶点的改变会导致法向量
+		不垂直于表面,因此,我们不能用这样子的模型矩阵来变换法向量.
+		修复这个行为的诀窍是使用一个为法向量专门定制的模型矩阵。这个矩阵称之为法线矩阵(Normal Matrix)
+		用inverse和transpose函数自己生成这个法线矩阵,这2个函数对所有的类型矩阵都有效
+		计算漫反射关照
+			1.在片段着色器定义光源位置:uniform vec3 lightPos;
+			2.在顶点着色器用顶点位置属性乘以模型矩阵来把它变换为世界空间坐标:FragPos = vec(model * vec4(aPos,1.0))
+			3.光的方向向量是光源位置向量与片段位置向量之间的向量差。当计算光照时我们通常不关心一个向量的模长或它的位置,只关心的他的方向.所以,几乎所有的计算都是用单位向量完成.
+				vec3 norm = normalize(Normal);
+				vec3 lightDir = normalize(lightPos - FragPos);
+			4.对norm和lightDir向量进行点乘,计算光源对当前片段实际的漫发射影响,结果值再乘以光的颜色,得到漫反射分量.
+			  两个向量之间的角度越大,漫反射的分量就会越小;
+			  	float diff = max(dot(norm,lightDir),0.0);
+				vec3 diffuse = diff * lightColor;
+			5.有了环境光分量和漫反射分量,把他们相加,然后结果乘以物体的颜色,获得片段最后的输出颜色
+				vec3 result = (ambient + diffuse) * objectColor;
+				FragColor = vec4(result, 1.0);
+	镜面高光(Specular Highlight)
+		镜面光照也是根据光的方向向量和物体的法向量来决定,但是它也依赖于观察方向.
+		计算镜面放光相关
+		1.片段着色器定义观察者世界坐标
+			uniform vec3 viewPos;
+			lightingShader.setVec3("viewPos", camera.Position);
+		2.定义镜面强度(Specular Intensity)变量
+			float specularStrength = 0.5;
+		3.计算视线方向向量,和对应的沿着法线轴的反射向量
+			vec3 viewDir = normalize(viewPos,-FragPos);
+			vec3 reflectDir = reflect(-lightDir,norm);
+			需要注意的是我们对lightDir向量进行了取反。reflect函数要求第一个向量是从光源指向片段位置的向量，
+			但是lightDir当前正好相反，是从片段指向光源（由先前我们计算lightDir向量时，减法的顺序决定）。
+			为了保证我们得到正确的reflect向量，我们通过对lightDir向量取反来获得相反的方向。
+			第二个参数要求是一个法向量，所以我们提供的是已标准化的norm向量。
+		4.计算镜面分量
+			vec3 specu = pow(max(dot(viewDir,reflectDir),0.0f),32);
+			vec3 specular = specularStrength * spec * lightColor
+			先计算视线方向与反射方向的点乘（并确保它不是负值），然后取它的32次幂。这个32是高光的反光度(Shininess)。
+			一个物体的反光度越高，反射光的能力越强，散射得越少，高光点就会越小
+材质
+	不同的物体会对光产生不同的反应.为了可以在OpenGL中模拟多种类型的物体,必须要为每个物体定义一个材质属性.
+	创建材质属性
+		Struct Material{
+			vec3 Ambient;
+			vec3 Diffuse;
+			vec3 Specular;
+			float Shininess;
+		};
+		uniform Material material;
+		Ambient材质向量定义在环境光照下这个物体反射的是什么颜色,通常这是和物体演的相同的颜色.
+		Diffuse材质向量定义了在漫反射光照下物体的颜色,漫反射颜色也要设置为我们需要的物体颜色.
+		Specular材质向量设置的是镜面光照对物体的物体颜色的影响(或者甚至可能反射一个物体特定的镜面高光颜色).
+		Shininess影响镜面高光的散射/半径
+		赋值材质属性
+		MaterialShader.setVec3("material.Ambient",1.0f,0.5f,0.31f);
+		MaterialShader.setVec3("material.Diffuse",1.0f,0.5f,0.31f);
+		MaterialShader.setVec3("material.Sepcular",0.5f,0.5f,0.5f);
+		MaterialShader.setFloat("material.Shininess",32.0f);
+	创建光属性
+		struct Light {
+			vec3 position;
+			vec3 ambient;
+			vec3 diffuse;
+			vec3 specular;
+		};
+
+		uniform Light light;
+
+光源的衰减
+	[Math Processing Error]代表片段到光源的距离。
+	为了计算衰减值，我们定义3个（可配置）项：
+	常数项[Math Processing Error]，一次项[Math Processing Error]和二次项[Math Processing Error]。
+		1.常数项通常是1.0，它的作用是保证分母永远不会比1小，因为它可以利用一定的距离增加亮度，这个结果不会影响到我们所寻找的。
+		2.一次项用于与距离值相乘，这会以线性的方式减少亮度。
+		3.二次项用于与距离的平方相乘，为光源设置一个亮度的二次递减。二次项在距离比较近的时候相比一次项会比一次项更小，但是当距离更远的时候比一次项更大。
+
+
+		
+		
