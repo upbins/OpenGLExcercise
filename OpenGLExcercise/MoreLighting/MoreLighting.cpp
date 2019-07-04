@@ -25,11 +25,13 @@ const unsigned int SCR_HEIGHT = 600;
 MyCamera MyCameraClass(vec3(0.0f, 0.0f, 3.0f), glm::radians(0.0f), glm::radians(180.0f), glm::vec3(0, 1.0f, 0));
 
 //平行光
-LightDirectional light =  LightDirectional(glm::vec3(0,0,3.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(1.0f,1.0f,1.0f));
+LightDirectional light =  LightDirectional(glm::vec3(1.0f,1.0f,-1.0f),glm::vec3(glm::radians(90.0f),glm::radians(0.0f),0.0f),glm::vec3(1.0f,1.0f,1.0f));
 
 //点光源
-//LightPoint light =  LightPoint(glm::vec3(1.0f,1.0f,-1.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(10.0f,10.0f,10.0f));
-
+LightPoint lightPonit0 =  LightPoint(glm::vec3(1.0f,0.0f,0.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(1.0f,0.0f,0.0f));
+LightPoint lightPonit1 =  LightPoint(glm::vec3(0.0f,1.0f,0.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(0.0f,1.0f,0.0f));
+LightPoint lightPonit2 =  LightPoint(glm::vec3(0.0f,0.0f,1.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(0.0f,0.0f,1.0f));
+LightPoint lightPonit3 =  LightPoint(glm::vec3(1.0f,1.0f,1.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(1.0f,1.0f,1.0f));
 //聚光灯
 //LightSpot light = LightSpot(glm::vec3(0.0f, 5.0f, 0.0f), glm::vec3(glm::radians(90.0f), 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f));
 
@@ -235,6 +237,36 @@ int main()
 			ourShader->setVec3("lightD.color", light.color.x, light.color.y, light.color.z);
 			ourShader->setVec3("lightD.pos", light.position.x, light.position.y, light.position.z);
 			ourShader->setVec3("lightD.dirToLight", light.direction.x, light.direction.y, light.direction.z);
+
+			ourShader->setVec3("LightP0.color", lightPonit0.color.x, lightPonit0.color.y, lightPonit0.color.z);
+			ourShader->setVec3("LightP0.pos", lightPonit0.position.x, lightPonit0.position.y, lightPonit0.position.z);
+			ourShader->setVec3("LightP0.dirToLight", lightPonit0.direction.x, lightPonit0.direction.y, lightPonit0.direction.z);
+			ourShader->setFloat("LightP0.constant",lightPonit0.constant);
+			ourShader->setFloat("LightP0.linear",lightPonit0.linear);
+			ourShader->setFloat("LightP0.quadratic",lightPonit0.quadratic);
+
+			ourShader->setVec3("LightP1.color", lightPonit1.color.x, lightPonit1.color.y, lightPonit1.color.z);
+			ourShader->setVec3("LightP1.pos", lightPonit1.position.x, lightPonit1.position.y, lightPonit1.position.z);
+			ourShader->setVec3("LightP1.dirToLight", lightPonit1.direction.x, lightPonit1.direction.y, lightPonit1.direction.z);
+			ourShader->setFloat("LightP1.constant",lightPonit1.constant);
+			ourShader->setFloat("LightP1.linear",lightPonit1.linear);
+			ourShader->setFloat("LightP1.quadratic",lightPonit1.quadratic);
+
+			ourShader->setVec3("LightP2.color", lightPonit2.color.x, lightPonit2.color.y, lightPonit2.color.z);
+			ourShader->setVec3("LightP2.pos", lightPonit2.position.x, lightPonit2.position.y, lightPonit2.position.z);
+			ourShader->setVec3("LightP2.dirToLight", lightPonit2.direction.x, lightPonit2.direction.y, lightPonit2.direction.z);
+			ourShader->setFloat("LightP2.constant",lightPonit2.constant);
+			ourShader->setFloat("LightP2.linear",lightPonit2.linear);
+			ourShader->setFloat("LightP2.quadratic",lightPonit2.quadratic);
+
+
+			ourShader->setVec3("LightP3.color", lightPonit3.color.x, lightPonit3.color.y, lightPonit3.color.z);
+			ourShader->setVec3("LightP3.pos", lightPonit3.position.x, lightPonit3.position.y, lightPonit3.position.z);
+			ourShader->setVec3("LightP3.dirToLight", lightPonit3.direction.x, lightPonit3.direction.y, lightPonit3.direction.z);
+			ourShader->setFloat("LightP3.constant",lightPonit3.constant);
+			ourShader->setFloat("LightP3.linear",lightPonit3.linear);
+			ourShader->setFloat("LightP3.quadratic",lightPonit3.quadratic);
+
 			//material set
 			ourShader->setVec3("material.ambient", myMaterial->ambient);
 			ourShader->setInt("material.diffuse", Shader::DIFFUSE);

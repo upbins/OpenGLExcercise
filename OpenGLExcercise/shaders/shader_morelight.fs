@@ -23,6 +23,19 @@ struct LightDirection
 };
 uniform LightDirection lightD;
 
+struct LightPoint
+{
+	vec3 pos;
+	vec3 color;
+	vec3 dirToLight;
+	float constant;
+	float linear;
+	float quadratic;
+};
+uniform LightPoint LightP0;
+uniform LightPoint LightP1;
+uniform LightPoint LightP2;
+uniform LightPoint LightP3;
 struct Light 
 {
 	vec3 objectColor;
@@ -47,6 +60,25 @@ vec3 CalcLightDirectional(LightDirection light,vec3 uNormal,vec3 dirToCamera)
 	vec3 result = diffuseColor + specularColor;
 	return result;
 }
+
+vec3 CalcLightPotint(LightPoint light,vec3 uNormal, vec3 dirToCamera)
+{
+	// attenuation 衰减
+	float dist = length(light.pos - FragPos);
+	float attenuation = 1 /(light.constant + light.linear * dist + light.quadratic * (dist * dist));
+
+	//diffuse
+	float diffuseIntensity = max(dot(normalize(light.pos - FragPos),uNormal),0) * attenuation;
+	vec3 diffuseColor = texture(material.diffuse,vec2(texCoordLight.x,texCoordLight.y)).rgb * diffuseIntensity * light.color;
+
+	//specular pow(max(dot(R,Camerapos),0),shininess) --光源出发指向片源
+	vec3 R = normalize(reflect(-normalize(light.pos - FragPos),uNormal));
+	float specularIntensity = pow(max(dot(R,dirToCamera),0),material.shininess) * attenuation ;
+	vec3 specularColor = texture(material.specular,vec2(texCoordLight.x,texCoordLight.y)).rgb * specularIntensity * light.color;//
+
+	vec3 result = diffuseColor + specularColor;
+	return result;
+}
 void main()
 {   
 
@@ -55,6 +87,10 @@ void main()
 	vec3 uNormal = normalize(Normal);
 	vec3 dirToCamera = normalize(cameraPos - FragPos);
 	result += CalcLightDirectional(lightD,uNormal,dirToCamera);
+	result += CalcLightPotint(LightP0,uNormal,dirToCamera);
+	result += CalcLightPotint(LightP1,uNormal,dirToCamera);
+	result += CalcLightPotint(LightP2,uNormal,dirToCamera);
+	result += CalcLightPotint(LightP3,uNormal,dirToCamera);
 	FragColor =  vec4(result,1.0f);
 	
 }
