@@ -12,7 +12,10 @@ public:
     glm::vec3 color;
     glm::vec3 direction = glm::vec3(0,0,1.0f);
     void UpdateDirection();
-
+    //衰减系数
+    float constant;
+	float linear;
+	float quadratic;
     float cosInnerPhy = 0.9f;
     float cosOutterPhy = 0.85f;
 };

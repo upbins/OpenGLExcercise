@@ -25,15 +25,15 @@ const unsigned int SCR_HEIGHT = 600;
 MyCamera MyCameraClass(vec3(0.0f, 0.0f, 3.0f), glm::radians(0.0f), glm::radians(180.0f), glm::vec3(0, 1.0f, 0));
 
 //平行光
-LightDirectional light =  LightDirectional(glm::vec3(1.0f,1.0f,-1.0f),glm::vec3(glm::radians(90.0f),glm::radians(0.0f),0.0f),glm::vec3(1.0f,1.0f,1.0f));
+LightDirectional light (glm::vec3(1.0f,1.0f,-1.0f),glm::vec3(glm::radians(90.0f),glm::radians(0.0f),0.0f),glm::vec3(1.0f,1.0f,1.0f));
 
 //点光源
-LightPoint lightPonit0 =  LightPoint(glm::vec3(1.0f,0.0f,0.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(1.0f,0.0f,0.0f));
-LightPoint lightPonit1 =  LightPoint(glm::vec3(0.0f,1.0f,0.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(0.0f,1.0f,0.0f));
-LightPoint lightPonit2 =  LightPoint(glm::vec3(0.0f,0.0f,1.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(0.0f,0.0f,1.0f));
-LightPoint lightPonit3 =  LightPoint(glm::vec3(1.0f,1.0f,1.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(1.0f,1.0f,1.0f));
+LightPoint lightPonit0 (glm::vec3(1.0f,0.0f,0.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(1.0f,0.0f,0.0f));
+LightPoint lightPonit1 (glm::vec3(0.0f,1.0f,0.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(0.0f,1.0f,0.0f));
+LightPoint lightPonit2 (glm::vec3(0.0f,0.0f,1.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(0.0f,0.0f,1.0f));
+LightPoint lightPonit3 (glm::vec3(1.0f,1.0f,1.0f),glm::vec3(glm::radians(45.0f),glm::radians(45.0f),0.0f),glm::vec3(1.0f,1.0f,1.0f));
 //聚光灯
-//LightSpot light = LightSpot(glm::vec3(0.0f, 5.0f, 0.0f), glm::vec3(glm::radians(90.0f), 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f));
+LightSpot lightSpot (glm::vec3(0.0f,8.0f,0.0f), glm::vec3(glm::radians(90.0f), 0.0f, 0.0f), glm::vec3(1.0f, 1.0f, 1.0f));
 
 float lastX;
 float lastY;
@@ -267,6 +267,15 @@ int main()
 			ourShader->setFloat("LightP3.linear",lightPonit3.linear);
 			ourShader->setFloat("LightP3.quadratic",lightPonit3.quadratic);
 
+			//lightSpot 
+			ourShader->setVec3("lightSpot.color", lightSpot.color.x, lightSpot.color.y, lightSpot.color.z);
+			ourShader->setVec3("lightSpot.pos", lightSpot.position.x, lightSpot.position.y, lightSpot.position.z);
+			ourShader->setVec3("lightSpot.dirToLight", lightSpot.direction.x, lightSpot.direction.y, lightSpot.direction.z);
+			ourShader->setFloat("lightSpot.constant",lightSpot.constant);
+			ourShader->setFloat("lightSpot.linear",lightSpot.linear);
+			ourShader->setFloat("lightSpot.quadratic",lightSpot.quadratic);
+			ourShader->setFloat("lightSpot.cosInnerPhy",lightSpot.cosInnerPhy);
+			ourShader->setFloat("lightSpot.cosOutterPhy",lightSpot.cosOutterPhy);
 			//material set
 			ourShader->setVec3("material.ambient", myMaterial->ambient);
 			ourShader->setInt("material.diffuse", Shader::DIFFUSE);
@@ -274,20 +283,20 @@ int main()
 			ourShader->setFloat("material.shininess", myMaterial->shininess);
 		}
 
-		//光源位置
-		glm::mat4 lampviewMat = glm::mat4(1.0);
-		lampviewMat = MyCameraClass.GetViewMatrix();
-		glm::mat4 lampmodelMat = glm::mat4(1.0);
-		lampmodelMat = glm::translate(lampmodelMat, light.position);
-		lampmodelMat = glm::scale(lampmodelMat, glm::vec3(0.2));
-		glm::mat4 lampprojection = glm::mat4(1.0f);
-		lampprojection = glm::perspective(glm::radians(MyCameraClass.Zoom), float(SCR_WIDTH / SCR_HEIGHT), 0.1f, 100.0f);
-		lampShader->use();
-		lampShader->setMat4("model", lampmodelMat);
-		lampShader->setMat4("view", lampviewMat);
-		lampShader->setMat4("projection", lampprojection);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
-		glBindVertexArray(CubeVAO);
+		// //光源位置
+		// glm::mat4 lampviewMat = glm::mat4(1.0);
+		// lampviewMat = MyCameraClass.GetViewMatrix();
+		// glm::mat4 lampmodelMat = glm::mat4(1.0);
+		// lampmodelMat = glm::translate(lampmodelMat, light.position);
+		// lampmodelMat = glm::scale(lampmodelMat, glm::vec3(0.2));
+		// glm::mat4 lampprojection = glm::mat4(1.0f);
+		// lampprojection = glm::perspective(glm::radians(MyCameraClass.Zoom), float(SCR_WIDTH / SCR_HEIGHT), 0.1f, 100.0f);
+		// lampShader->use();
+		// lampShader->setMat4("model", lampmodelMat);
+		// lampShader->setMat4("view", lampviewMat);
+		// lampShader->setMat4("projection", lampprojection);
+		// glDrawArrays(GL_TRIANGLES, 0, 36);
+		// glBindVertexArray(CubeVAO);
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
 		// -------------------------------------------------------------------------------
 		glfwSwapBuffers(window);
